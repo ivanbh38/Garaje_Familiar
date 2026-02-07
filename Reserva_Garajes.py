@@ -2,17 +2,25 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, time
 import os
+import pytz # Importamos la librería de zonas horarias
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Garajes Pontika/Beraun", page_icon="🅿️")
 
+# Definimos la zona horaria de España
+TZ_MADRID = pytz.timezone('Europe/Madrid')
+
 RELACION = {
-    "Furgoneta": "Pontika Furgo",
+    "Furgoneta": "Pontika Furgoneta",
     "Zafira": "Beraun",
     "Astra": "Pontika Astra"
 }
 
 ARCHIVO_DB = 'reservas.csv'
+
+def obtener_hora_madrid():
+    # Obtiene la hora actual en Madrid y quita la información de zona para poder comparar con el Excel
+    return datetime.now(TZ_MADRID).replace(tzinfo=None)
 
 def cargar_datos():
     if os.path.exists(ARCHIVO_DB):
@@ -28,12 +36,21 @@ def guardar_datos(df):
     df.to_csv(ARCHIVO_DB, index=False)
 
 df = cargar_datos()
-ahora = datetime.now()
+ahora = obtener_hora_madrid()
 
-# --- 1. ESTADO ACTUAL ---
-st.title("🚗 Control de Garajes- v1.0.2 🚗")
+# --- 1. TÍTULO Y BOTÓN DE REFRESCO ---
+col_tit, col_ref = st.columns([3, 1])
+with col_tit:
+    st.title("🚗 Gestión de Garajes v1.0.3")
+with col_ref:
+    # Este botón sirve para recargar la página si estás esperando a que cambie la hora
+    if st.button("🔄 Actualizar"):
+        st.rerun()
 
-st.subheader("Estado de los garajes ahora:")
+st.caption(f"Hora del sistema (Madrid): {ahora.strftime('%H:%M')}")
+
+# --- 2. ESTADO ACTUAL ---
+st.subheader("Estado actual:")
 cols = st.columns(3)
 
 for i, (coche, garaje) in enumerate(RELACION.items()):
@@ -44,21 +61,27 @@ for i, (coche, garaje) in enumerate(RELACION.items()):
         if not reserva_coche.empty:
             res = reserva_coche.iloc[0]
             hora_fin_str = res['Fin'].strftime('%H:%M')
+            hora_ini_str = res['Inicio'].strftime('%H:%M')
             
+            # COMPARACIÓN DE HORAS CORREGIDA
             if ahora >= res['Inicio'] and ahora <= res['Fin']:
+                # ESTÁ DENTRO DEL HORARIO
                 st.success(f"🟢 **{garaje}**\n\nLIBRE")
                 st.caption(f"Usa: {res['Usuario']}\nFin: {hora_fin_str}")
+                
             elif ahora > res['Fin']:
+                # SE HA PASADO DE HORA
                 st.warning(f"🟠 **{garaje}**\n\nPENDIENTE")
                 st.caption(f"Debía volver: {hora_fin_str}")
             else:
+                # ES FUTURO
                 st.error(f"🔴 **{garaje}**\n\nOCUPADO")
-                st.caption(f"Próxima: {res['Inicio'].strftime('%H:%M')}")
+                st.caption(f"Próxima: {hora_ini_str}")
         else:
             st.error(f"🔴 **{garaje}**\n\nOCUPADO")
             st.caption(f"Sin reservas")
 
-# --- 2. BOTÓN DE CONFIRMACIÓN DE LLEGADA ---
+# --- 3. BOTÓN DE CONFIRMACIÓN DE LLEGADA ---
 st.divider()
 pendientes = df[(df['Llegado'] == False) & (df['Inicio'] <= ahora)]
 
@@ -74,7 +97,7 @@ if not pendientes.empty:
                 guardar_datos(df)
                 st.rerun()
 
-# --- 3. FORMULARIO DE RESERVA ---
+# --- 4. FORMULARIO DE RESERVA ---
 st.divider()
 st.subheader("📅 Nueva Reserva")
 with st.form("nueva_reserva"):
@@ -84,6 +107,7 @@ with st.form("nueva_reserva"):
     
     c1, c2 = st.columns(2)
     with c1:
+        # Ponemos una hora por defecto cómoda
         h_inicio = st.time_input("Hora Inicio", value=time(9, 0))
     with c2:
         h_fin = st.time_input("Hora Fin", value=time(10, 0))
@@ -100,16 +124,15 @@ with st.form("nueva_reserva"):
             guardar_datos(df)
             st.rerun()
 
-# --- 4. LISTA DETALLADA Y CANCELACIÓN ---
+# --- 5. LISTA DETALLADA Y CANCELACIÓN ---
 st.divider()
-st.subheader("📝 Próximas Reservas y Gestión")
+st.subheader("📝 Gestión")
 
 if not df.empty:
-    # Mostramos reservas que no han llegado aún
     df_ver = df[df['Llegado'] == False].sort_values('Inicio')
     
     if not df_ver.empty:
-        # Mostramos la tabla con las columnas que querías
+        # Tabla visual
         st.dataframe(
             df_ver[['Coche', 'Usuario', 'Inicio', 'Fin']], 
             column_config={
@@ -122,8 +145,8 @@ if not df.empty:
         
         # Selector para cancelar
         opciones_cancelar = [f"{r['Coche']} - {r['Usuario']} ({r['Inicio'].strftime('%d/%m %H:%M')})" for i, r in df_ver.iterrows()]
-        seleccion = st.selectbox("Si te has equivocado, elige para borrar:", opciones_cancelar)
-        if st.button("❌ Cancelar Reserva"):
+        seleccion = st.selectbox("Borrar reserva:", opciones_cancelar)
+        if st.button("❌ Cancelar"):
             indice = df_ver.index[opciones_cancelar.index(seleccion)]
             df = df.drop(indice)
             guardar_datos(df)
