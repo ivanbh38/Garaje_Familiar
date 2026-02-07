@@ -7,9 +7,9 @@ import os
 st.set_page_config(page_title="Garajes Pontika/Beraun", page_icon="🅿️")
 
 RELACION = {
-    "Furgoneta": "Pontika 1",
+    "Furgoneta": "Pontika Furgo",
     "Zafira": "Beraun",
-    "Astra": "Pontika 2"
+    "Astra": "Pontika Astra"
 }
 
 ARCHIVO_DB = 'reservas.csv'
@@ -31,7 +31,7 @@ df = cargar_datos()
 ahora = datetime.now()
 
 # --- 1. ESTADO ACTUAL ---
-st.title("🚗 Control de Garajes- v1.0.1 🚗")
+st.title("🚗 Control de Garajes- v1.0.2 🚗")
 
 st.subheader("Estado de los garajes ahora:")
 cols = st.columns(3)
